@@ -6,17 +6,64 @@
   <title>Geni SDK - Fetch Ancestors</title>
   <!-- Load the Geni SDK -->
   <script src="https://www.geni.com/jsdk.js"></script>
+  <style>
+    .container {
+      display: flex;
+    }
+    .column {
+      flex: 1;
+      padding: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .ancestor-list {
+      margin-top: 10px;
+    }
+  </style>
 </head>
 <body>
   <h1>Fetch Geni Profiles and Ancestors</h1>
 
   <!-- Input for multiple profile URLs -->
-  <textarea id="profile-urls" placeholder="Enter Geni profile URLs (one per line)" cols="100"></textarea><br />
+  <textarea id="profile-urls" placeholder="Enter Geni profile URLs (one per line)" style="width: 100%; height: 100px;"></textarea><br />
   <button id="fetch-btn">Fetch Ancestors</button>
   <button id="clear-cache-btn">Clear Cache</button>
 
-  <!-- Display the result -->
-  <div id="result"></div>
+  <!-- Container for the two columns -->
+  <div class="container">
+    <!-- Left Column: Results and MRCA -->
+    <div class="column">
+      <h2>Results</h2>
+      <div id="result"></div>
+    </div>
+
+    <!-- Right Column: Cached Profiles -->
+    <div class="column">
+      <h2>Cached Profiles</h2>
+      <table id="cached-profiles-table">
+        <thead>
+          <tr>
+            <th>Profile Name</th>
+            <th>Profile ID</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="ancestor-list">
+        <h3>Ancestor List</h3>
+        <ul id="ancestor-list"></ul>
+      </div>
+    </div>
+  </div>
 
   <!-- Load your custom JavaScript -->
   <script src="app.js"></script>
