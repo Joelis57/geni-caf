@@ -33,25 +33,27 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Fetch ancestors by GUID (initial API call using GUID)
-  async function fetchAncestorsByGUID(guid, ancestors = {}) {
-    console.log(`Fetching ancestors for profile GUID ${guid}...`);
+  // Fetch ancestors by GUID (initial API call using GUID) and track relation
+  async function fetchAncestorsByGUID(guid, relationship, ancestors = []) {
+    console.log(`Fetching ancestors for profile GUID ${guid} (Relation: ${relationship})...`);
+
+    await delay(REQUEST_DELAY);
     return new Promise((resolve) => {
       Geni.api(`/profile-g${guid}/immediate-family`, async function (response) {
         if (response && response.focus) {
           const profileData = response.focus;
           console.log(`Fetched immediate family for profile GUID ${guid}:`, profileData);
 
-          // Add profile to ancestors list
-          ancestors[profileData.id] = {
-            name: profileData.name,
-            id: profileData.id,
+          // Add this ancestor to the ancestors list with the relationship
+          ancestors.push({
             guid: profileData.guid,
-          };
+            name: profileData.name,
+            relation: relationship
+          });
 
           let parents = [];
 
-          // Extract parents from the union in nodes
+          // Extract parents using profile IDs returned from the union in nodes
           if (response.nodes && response.nodes[profileData.id].edges) {
             const edges = response.nodes[profileData.id].edges;
             for (const unionKey in edges) {
@@ -78,18 +80,20 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log(`Profile ${guid} has no parents listed.`);
           }
 
-          // Sequentially fetch parents with a delay
+          // Sequentially fetch parents with a delay using their profile IDs to get their GUIDs
           for (const parent of parents) {
             await delay(REQUEST_DELAY);  // Ensure delay is applied before each API call
-            const parentData = await fetchParentProfileByID(parent.id, ancestors); // Fetch using Profile ID
+            const parentData = await fetchParentProfileByID(parent.id, ancestors); // Fetch parent's profile by ID to get GUID
             if (parentData && parentData.guid) {
-              await fetchAncestorsByGUID(parentData.guid, ancestors);  // Recursive call with GUID after fetching parent's data
+              // Continue fetching ancestors for the parent using their GUID, updating the relationship
+              await fetchAncestorsByGUID(
+                parentData.guid,
+                getUpdatedRelationship(relationship),  // Update the relationship (e.g., parent -> grandparent)
+                ancestors
+              );
             }
           }
 
-          // Cache the ancestors list
-          localStorage.setItem(guid, JSON.stringify(ancestors));  
-          console.log(`Stored ancestors for profile GUID ${profileData.guid} in local storage.`);
           resolve(ancestors);
         } else {
           console.warn(`No data found for profile GUID ${guid}.`);
@@ -100,20 +104,15 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Fetch parent's profile by profile ID (use this to get GUID for further recursion)
-  async function fetchParentProfileByID(profileId, ancestors = {}) {
+  async function fetchParentProfileByID(profileId, ancestors = []) {
     console.log(`Fetching profile for parent ID ${profileId}...`);
-    return new Promise((resolve) => {
-      Geni.api(`/profile-${profileId}`, function (response) {
-        if (response && response.focus) {
-          const parentData = response.focus;
-          console.log(`Fetched parent profile for ID ${profileId}:`, parentData);
 
-          // Add parent to ancestors list
-          ancestors[parentData.id] = {
-            name: parentData.name,
-            id: parentData.id,
-            guid: parentData.guid,
-          };
+    await delay(REQUEST_DELAY);
+    return new Promise((resolve) => {
+      Geni.api(`/profile-${profileId}`, async function (response) {
+        if (response && response.guid) {
+          const parentData = response; // Parent's data, with GUID included in the structure
+          console.log(`Fetched parent profile for ID ${profileId}:`, parentData);
 
           resolve(parentData);  // Return the parent's data (including GUID)
         } else {
@@ -122,6 +121,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       });
     });
+  }
+
+  // Function to update the relationship (e.g., from parent to grandparent, etc.)
+  function getUpdatedRelationship(currentRelation) {
+    if (currentRelation === 'parent') return 'grandparent';
+    const matches = currentRelation.match(/(\d+)xG grandparent/);
+    if (matches) {
+      const number = parseInt(matches[1]) + 1;
+      return `${number}xG grandparent`;
+    }
+    return '1xG grandparent';  // Default to 1xG grandparent after parent
   }
 
   // Event listener for the fetch button
@@ -135,14 +145,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Sequentially process each profile
         for (const profileUrl of profileUrls) {
-          const profileGUID = extractProfileGUID(profileUrl.trim());
+          const profileGUID = extractProfileGUID(profileUrl.trim());  // Directly using GUID from URL
           console.log(`Extracted Profile GUID: ${profileGUID} from URL: ${profileUrl.trim()}`);
 
           if (profileGUID) {
+            if (localStorage.getItem(profileGUID)) {
+              console.log(`Profile ${profileGUID} is already cached, skipping API call.`);
+              continue;  // Skip API call if already cached
+            }
+
             console.log(`Fetching ancestors for Profile GUID: ${profileGUID}`);
-            await delay(REQUEST_DELAY);  // Add delay before fetching the next profile to respect rate limits
-            const ancestors = await fetchAncestorsByGUID(profileGUID);
-            console.log(`Ancestors fetched for Profile GUID ${profileGUID}:`, Object.keys(ancestors));
+
+            const ancestors = await fetchAncestorsByGUID(profileGUID, 'parent');  // Start with parents
+
+            // Store the ancestors in local storage under the profile's GUID
+            localStorage.setItem(profileGUID, JSON.stringify(ancestors));
+            console.log(`Ancestors fetched for Profile GUID ${profileGUID}:`, ancestors);
             allAncestors[profileGUID] = ancestors;
           } else {
             console.error(`Invalid Profile URL: ${profileUrl}`);
@@ -157,13 +175,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  // Function to extract the profile GUID from the URL
+  // Function to extract the profile GUID from the URL (directly using GUID here)
   function extractProfileGUID(url) {
-    const regex = /\/people\/[^\/]+\/(\d+)/;
+    const regex = /\/people\/[^\/]+\/(\d+)/;  // Matches GUID in the URL
     const match = url.match(regex);
 
     if (match && match[1]) {
-      return match[1]; // Return the profile GUID
+      return match[1]; // Return the GUID directly from the URL
     }
     console.error(`Unable to extract Profile GUID from URL: ${url}`);
     return null;
