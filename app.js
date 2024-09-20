@@ -123,6 +123,26 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  function findMRCA(firstAncestors, secondAncestors) {
+    ancestorDepth = 'parent';
+    while (true) {
+      var atLeastOneInThisLevel = false;
+      for (const firstAncestor of firstAncestors) {
+        for (const secondAncestor of secondAncestors) {
+          if (firstAncestor.relation == ancestorDepth && secondAncestor.relation == ancestorDepth) {
+            atLeastOneInThisLevel = true;
+            if (firstAncestor.guid == secondAncestor.guid) {
+              return firstAncestor; // MRCA 
+            }
+          }
+        }
+      }
+      getUpdatedRelationship(ancestorDepth);
+      if (!atLeastOneInThisLevel) break;
+    }
+    return null;
+  }
+
   // Function to update the relationship (e.g., from parent to grandparent, etc.)
   function getUpdatedRelationship(currentRelation) {
     if (currentRelation === 'self') return 'parent';
@@ -152,6 +172,7 @@ document.addEventListener('DOMContentLoaded', function () {
           if (profileGUID) {
             if (localStorage.getItem(profileGUID)) {
               console.log(`Profile ${profileGUID} is already cached, skipping API call.`);
+              allAncestors[profileGUID] = JSON.parse(localStorage.getItem(profileGUID));
               continue;  // Skip API call if already cached
             }
 
@@ -170,6 +191,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Output the final results or process further
         console.log("All Ancestors Processed:", allAncestors);
+
+        for (const firstURL of profileUrls) {
+          const firstProfileGUID = extractProfileGUID(firstURL.trim());
+          for (const secondURL of profileUrls) {
+            const secondProfileGUID = extractProfileGUID(secondURL.trim());
+            if (firstProfileGUID != secondProfileGUID) {
+              mrca = findMRCA(allAncestors[firstProfileGUID], allAncestors[secondProfileGUID]);
+              if (mrca != null) {
+                console.log(`${allAncestors[firstProfileGUID][0].name} and ${allAncestors[secondProfileGUID][0].name} MRCA is ${mrca.name}[${mrca.guid}]`);
+              }
+            }
+          }
+        }
       });
     } else {
       alert('Please enter at least two profile URLs');
