@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', function () {
               // Continue fetching ancestors for the parent using their GUID, updating the relationship
               await fetchAncestorsByGUID(
                 parentData.guid,
-                getUpdatedRelationship(relationship),  // Update the relationship (e.g., parent -> grandparent)
+                getUpdatedRelationship(relationship),  // Update the relationship correctly
                 ancestors
               );
             }
@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Function to update the relationship (e.g., from parent to grandparent, etc.)
   function getUpdatedRelationship(currentRelation) {
+    if (currentRelation === 'self') return 'parent';
     if (currentRelation === 'parent') return 'grandparent';
     const matches = currentRelation.match(/(\d+)xG grandparent/);
     if (matches) {
@@ -156,7 +157,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             console.log(`Fetching ancestors for Profile GUID: ${profileGUID}`);
 
-            const ancestors = await fetchAncestorsByGUID(profileGUID, 'parent');  // Start with parents
+            const ancestors = await fetchAncestorsByGUID(profileGUID, 'self');  // Start with "self"
 
             // Store the ancestors in local storage under the profile's GUID
             localStorage.setItem(profileGUID, JSON.stringify(ancestors));
