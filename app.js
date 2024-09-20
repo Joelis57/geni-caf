@@ -41,7 +41,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (response && response.focus) {
           const profileData = response.focus;
           console.log(`Fetched immediate family for profile GUID ${guid}:`, profileData);
-          ancestors[profileData.id] = profileData;
+
+          // Add profile to ancestors list
+          ancestors[profileData.id] = {
+            name: profileData.name,
+            id: profileData.id,
+            guid: profileData.guid,
+          };
 
           let parents = [];
 
@@ -81,7 +87,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
           }
 
-          localStorage.setItem(profileData.id, JSON.stringify(ancestors));  // Store using profile ID
+          // Cache the ancestors list
+          localStorage.setItem(guid, JSON.stringify(ancestors));  
           console.log(`Stored ancestors for profile GUID ${profileData.guid} in local storage.`);
           resolve(ancestors);
         } else {
@@ -100,7 +107,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (response && response.focus) {
           const parentData = response.focus;
           console.log(`Fetched parent profile for ID ${profileId}:`, parentData);
-          ancestors[parentData.id] = parentData;
+
+          // Add parent to ancestors list
+          ancestors[parentData.id] = {
+            name: parentData.name,
+            id: parentData.id,
+            guid: parentData.guid,
+          };
+
           resolve(parentData);  // Return the parent's data (including GUID)
         } else {
           console.warn(`No data found for parent ID ${profileId}.`);
