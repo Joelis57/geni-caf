@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function () {
       var atLeastOneInThisLevel = false;
       for (const firstAncestor of firstAncestors) {
         for (const secondAncestor of secondAncestors) {
-          if (firstAncestor.relation == ancestorDepth && secondAncestor.relation == ancestorDepth) {
+          if (firstAncestor.relation == ancestorDepth) {
             atLeastOneInThisLevel = true;
             if (firstAncestor.guid == secondAncestor.guid) {
               return [firstAncestor, secondAncestor]; // MRCA 
