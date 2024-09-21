@@ -6,12 +6,31 @@ document.addEventListener('DOMContentLoaded', function () {
     cookie: true,
   });
 
+  loadFromCache();
+
   // Global delay for rate limiting (hardcoded 11 seconds)
   const REQUEST_DELAY = 11000;
+  const MAX_DEPTH = 6 + 2;
 
   // Helper function to delay execution (for rate limiting)
   function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function loadFromCache() {
+    const table = document.getElementById("cached-profiles-table");
+    const items = { ...localStorage };
+    for (const item in items) {
+      // is GUID?
+      if (!isNaN(item) && item.length == 19) {
+        var ancestors = JSON.parse(items[item]);
+        let row = table.insertRow();
+        let firstCol = row.insertCell(0);
+        firstCol.innerHTML = `<a href="https://www.geni.com/people/x/${ancestors[0].guid}">${ancestors[0].name}</a>`;
+        let secondCol = row.insertCell(1);
+        secondCol.innerHTML = ancestors.length - 1;
+      }
+    }
   }
 
   // Function to handle user authentication
@@ -57,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function () {
           if (response.nodes && response.nodes[profileData.id].edges) {
             const edges = response.nodes[profileData.id].edges;
             for (const unionKey in edges) {
-              if (edges[unionKey].rel === "child" && response.nodes[profileData.id].edges[unionKey]) {
+              if (edges[unionKey].rel === "child" && edges[unionKey].rel_modifier !== "adopt" && response.nodes[profileData.id].edges[unionKey]) {
                 const unionData = response.nodes[unionKey];
                 if (unionData && unionData.edges) {
                   for (const parentKey in unionData.edges) {
@@ -80,18 +99,22 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log(`Profile ${guid} has no parents listed.`);
           }
 
-          // Sequentially fetch parents with a delay using their profile IDs to get their GUIDs
-          for (const parent of parents) {
-            await delay(REQUEST_DELAY);  // Ensure delay is applied before each API call
-            const parentData = await fetchParentProfileByID(parent.id, ancestors); // Fetch parent's profile by ID to get GUID
-            if (parentData && parentData.guid) {
-              // Continue fetching ancestors for the parent using their GUID, updating the relationship
-              await fetchAncestorsByGUID(
-                parentData.guid,
-                getUpdatedRelationship(relationship),  // Update the relationship correctly
-                ancestors
-              );
+          if (isNaN(relationship[0]) || relationship[0] < (MAX_DEPTH - 2)) {
+            // Sequentially fetch parents with a delay using their profile IDs to get their GUIDs
+            for (const parent of parents) {
+              await delay(REQUEST_DELAY);  // Ensure delay is applied before each API call
+              const parentData = await fetchParentProfileByID(parent.id, ancestors); // Fetch parent's profile by ID to get GUID
+              if (parentData && parentData.guid) {
+                // Continue fetching ancestors for the parent using their GUID, updating the relationship
+                await fetchAncestorsByGUID(
+                  parentData.guid,
+                  getUpdatedRelationship(relationship),  // Update the relationship correctly
+                  ancestors
+                );
+              }
             }
+          } else {
+            console.log('Max depth reached, stopped going deeper.')
           }
 
           resolve(ancestors);
@@ -132,7 +155,7 @@ document.addEventListener('DOMContentLoaded', function () {
           if (firstAncestor.relation == ancestorDepth && secondAncestor.relation == ancestorDepth) {
             atLeastOneInThisLevel = true;
             if (firstAncestor.guid == secondAncestor.guid) {
-              return firstAncestor; // MRCA 
+              return [firstAncestor, secondAncestor]; // MRCA 
             }
           }
         }
@@ -182,6 +205,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Store the ancestors in local storage under the profile's GUID
             localStorage.setItem(profileGUID, JSON.stringify(ancestors));
+            //loadFromCache();
             console.log(`Ancestors fetched for Profile GUID ${profileGUID}:`, ancestors);
             allAncestors[profileGUID] = ancestors;
           } else {
@@ -192,18 +216,25 @@ document.addEventListener('DOMContentLoaded', function () {
         // Output the final results or process further
         console.log("All Ancestors Processed:", allAncestors);
 
-        for (const firstURL of profileUrls) {
-          const firstProfileGUID = extractProfileGUID(firstURL.trim());
-          for (const secondURL of profileUrls) {
-            const secondProfileGUID = extractProfileGUID(secondURL.trim());
+        var results = "";
+        for (var i = 0; i < profileUrls.length - 1; i++) {
+          const firstProfileGUID = extractProfileGUID(profileUrls[i].trim());
+          for (var j = i + 1; j < profileUrls.length; j++) {
+            const secondProfileGUID = extractProfileGUID(profileUrls[j].trim());
             if (firstProfileGUID != secondProfileGUID) {
-              mrca = findMRCA(allAncestors[firstProfileGUID], allAncestors[secondProfileGUID]);
-              if (mrca != null) {
-                console.log(`${allAncestors[firstProfileGUID][0].name} and ${allAncestors[secondProfileGUID][0].name} MRCA is ${mrca.name}[${mrca.guid}]`);
+              mrcas = findMRCA(allAncestors[firstProfileGUID], allAncestors[secondProfileGUID]);
+              if (mrcas != null) {
+                var firstAncestor = allAncestors[firstProfileGUID][0];
+                var secondAncestor = allAncestors[secondProfileGUID][0];
+                results += `MRCA between <a href="https://www.geni.com/people/x/${firstAncestor.guid}">${firstAncestor.name}</a>`;
+                results +=  ` and <a href="https://www.geni.com/people/x/${secondAncestor.guid}">${secondAncestor.name}</a>`;
+                results +=  `: <a href="https://www.geni.com/people/x/${mrcas[0].guid}">${mrcas[0].name}</a> (${mrcas[0].relation} & ${mrcas[1].relation})`;
+                results += '<br/>';
               }
             }
           }
         }
+        document.getElementById('result').innerHTML = results;
       });
     } else {
       alert('Please enter at least two profile URLs');
