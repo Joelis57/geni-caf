@@ -6,6 +6,20 @@ document.addEventListener('DOMContentLoaded', function () {
     cookie: true,
   });
 
+
+  // Schedule a token refresh every hour
+  setInterval(function () {
+    refreshToken();
+  }, 60 * 60 * 1000); // 1 hour
+
+  // Token refresh function
+  function refreshToken() {
+    console.log('Attempting to refresh the access token...');
+    Geni.Auth.refreshAccessToken(function (response) {
+      console.log(`Refresh status: ${JSON.stringify(response)}`);
+    });
+  }
+
   loadFromCache();
 
   // Global delay for rate limiting (hardcoded 11 seconds)
