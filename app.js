@@ -25,22 +25,6 @@ document.addEventListener('DOMContentLoaded', function () {
   // Global delay for rate limiting (hardcoded 11 seconds)
   const REQUEST_DELAY = 11000;
   const MAX_DEPTH = 6 + 2;
-  const MAX_RETRIES = 100;
-
-  async function retryApiCall(call) {
-    let attempts = 0;
-    while (attempts < MAX_RETRIES) {
-      try {
-        const result = await call();
-        return result;  // Successful call, return the result
-      } catch (error) {
-        attempts++;
-        console.warn(`API call failed on attempt ${attempts}. Retrying in ${delayMs}ms...`, error);
-        await delay(REQUEST_DELAY);  // Wait before retrying
-      }
-    }
-    throw new Error(`API call failed after ${MAX_RETRIES} attempts.`);
-  }
 
   // Helper function to delay execution (for rate limiting)
   function delay(ms) {
@@ -87,73 +71,71 @@ document.addEventListener('DOMContentLoaded', function () {
     console.log(`Fetching ancestors for profile GUID ${guid} (Relation: ${relationship})...`);
 
     await delay(REQUEST_DELAY);
-    return retryApiCall(async () => {
-      return new Promise((resolve) => {
-        Geni.api(`/profile-g${guid}/immediate-family`, async function (response) {
-          if (response && response.focus) {
-            const profileData = response.focus;
-            console.log(`Fetched immediate family for profile GUID ${guid}:`, profileData);
+    return new Promise((resolve) => {
+      Geni.api(`/profile-g${guid}/immediate-family`, async function (response) {
+        if (response && response.focus) {
+          const profileData = response.focus;
+          console.log(`Fetched immediate family for profile GUID ${guid}:`, profileData);
 
-            // Add this ancestor to the ancestors list with the relationship
-            ancestors.push({
-              guid: profileData.guid,
-              name: profileData.name,
-              relation: relationship
-            });
+          // Add this ancestor to the ancestors list with the relationship
+          ancestors.push({
+            guid: profileData.guid,
+            name: profileData.name,
+            relation: relationship
+          });
 
-            let parents = [];
+          let parents = [];
 
-            // Extract parents using profile IDs returned from the union in nodes
-            if (response.nodes && response.nodes[profileData.id].edges) {
-              const edges = response.nodes[profileData.id].edges;
-              for (const unionKey in edges) {
-                if (edges[unionKey].rel === "child" && edges[unionKey].rel_modifier !== "adopt" && response.nodes[profileData.id].edges[unionKey]) {
-                  const unionData = response.nodes[unionKey];
-                  if (unionData && unionData.edges) {
-                    for (const parentKey in unionData.edges) {
-                      if (unionData.edges[parentKey].rel === "partner") {
-                        const parentNode = response.nodes[parentKey];
-                        const parentID = parentNode.id.replace('profile-', ''); // Extract profile ID without 'profile-'
-                        if (parentID) {
-                          parents.push({ id: parentID });
-                        }
+          // Extract parents using profile IDs returned from the union in nodes
+          if (response.nodes && response.nodes[profileData.id].edges) {
+            const edges = response.nodes[profileData.id].edges;
+            for (const unionKey in edges) {
+              if (edges[unionKey].rel === "child" && edges[unionKey].rel_modifier !== "adopt" && response.nodes[profileData.id].edges[unionKey]) {
+                const unionData = response.nodes[unionKey];
+                if (unionData && unionData.edges) {
+                  for (const parentKey in unionData.edges) {
+                    if (unionData.edges[parentKey].rel === "partner") {
+                      const parentNode = response.nodes[parentKey];
+                      const parentID = parentNode.id.replace('profile-', ''); // Extract profile ID without 'profile-'
+                      if (parentID) {
+                        parents.push({ id: parentID });
                       }
                     }
                   }
                 }
               }
             }
-
-            if (parents.length > 0) {
-              console.log(`Profile ${guid} has parents:`, parents.map(p => p.id));
-            } else {
-              console.log(`Profile ${guid} has no parents listed.`);
-            }
-
-            if (isNaN(relationship[0]) || relationship[0] < (MAX_DEPTH - 2)) {
-              // Sequentially fetch parents with a delay using their profile IDs to get their GUIDs
-              for (const parent of parents) {
-                await delay(REQUEST_DELAY);  // Ensure delay is applied before each API call
-                const parentData = await fetchParentProfileByID(parent.id, ancestors); // Fetch parent's profile by ID to get GUID
-                if (parentData && parentData.guid) {
-                  // Continue fetching ancestors for the parent using their GUID, updating the relationship
-                  await fetchAncestorsByGUID(
-                    parentData.guid,
-                    getUpdatedRelationship(relationship),  // Update the relationship correctly
-                    ancestors
-                  );
-                }
-              }
-            } else {
-              console.log('Max depth reached, stopped going deeper.')
-            }
-
-            resolve(ancestors);
-          } else {
-            console.warn(`No data found for profile GUID ${guid}.`);
-            resolve(ancestors);
           }
-        });
+
+          if (parents.length > 0) {
+            console.log(`Profile ${guid} has parents:`, parents.map(p => p.id));
+          } else {
+            console.log(`Profile ${guid} has no parents listed.`);
+          }
+
+          if (isNaN(relationship[0]) || relationship[0] < (MAX_DEPTH - 2)) {
+            // Sequentially fetch parents with a delay using their profile IDs to get their GUIDs
+            for (const parent of parents) {
+              await delay(REQUEST_DELAY);  // Ensure delay is applied before each API call
+              const parentData = await fetchParentProfileByID(parent.id, ancestors); // Fetch parent's profile by ID to get GUID
+              if (parentData && parentData.guid) {
+                // Continue fetching ancestors for the parent using their GUID, updating the relationship
+                await fetchAncestorsByGUID(
+                  parentData.guid,
+                  getUpdatedRelationship(relationship),  // Update the relationship correctly
+                  ancestors
+                );
+              }
+            }
+          } else {
+            console.log('Max depth reached, stopped going deeper.')
+          }
+
+          resolve(ancestors);
+        } else {
+          console.warn(`No data found for profile GUID ${guid}.`);
+          resolve(ancestors);
+        }
       });
     });
   }
@@ -163,19 +145,17 @@ document.addEventListener('DOMContentLoaded', function () {
     console.log(`Fetching profile for parent ID ${profileId}...`);
 
     await delay(REQUEST_DELAY);
-    return retryApiCall(async () => {
-      return new Promise((resolve) => {
-        Geni.api(`/profile-${profileId}`, async function (response) {
-          if (response && response.guid) {
-            const parentData = response; // Parent's data, with GUID included in the structure
-            console.log(`Fetched parent profile for ID ${profileId}:`, parentData);
+    return new Promise((resolve) => {
+      Geni.api(`/profile-${profileId}`, async function (response) {
+        if (response && response.guid) {
+          const parentData = response; // Parent's data, with GUID included in the structure
+          console.log(`Fetched parent profile for ID ${profileId}:`, parentData);
 
-            resolve(parentData);  // Return the parent's data (including GUID)
-          } else {
-            console.warn(`No data found for parent ID ${profileId}.`);
-            resolve(null);
-          }
-        });
+          resolve(parentData);  // Return the parent's data (including GUID)
+        } else {
+          console.warn(`No data found for parent ID ${profileId}.`);
+          resolve(null);
+        }
       });
     });
   }
