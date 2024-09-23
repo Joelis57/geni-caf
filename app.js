@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Global delay for rate limiting (hardcoded 11 seconds)
   const REQUEST_DELAY = 11000;
   const MAX_DEPTH = 6 + 2;
+  const MAX_RETRIES = 100;
 
   // Helper function to delay execution (for rate limiting)
   function delay(ms) {
@@ -67,7 +68,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Fetch ancestors by GUID (initial API call using GUID) and track relation
-  async function fetchAncestorsByGUID(guid, relationship, ancestors = []) {
+  async function fetchAncestorsByGUID(guid, relationship, ancestors = [], retries = 0) {
     console.log(`Fetching ancestors for profile GUID ${guid} (Relation: ${relationship})...`);
 
     await delay(REQUEST_DELAY);
@@ -134,14 +135,20 @@ document.addEventListener('DOMContentLoaded', function () {
           resolve(ancestors);
         } else {
           console.warn(`No data found for profile GUID ${guid}.`);
-          resolve(ancestors);
+          if (retries < MAX_RETRIES) {
+            console.log(`Retrying fetchAncestorsByGUID for GUID ${guid} (Attempt ${retries + 1})`);
+            resolve(await fetchAncestorsByGUID(guid, relationship, ancestors, retries + 1));
+          } else {
+            console.error(`Failed to fetch data for GUID ${guid} after ${MAX_RETRIES} retries.`);
+            resolve(ancestors);
+          }
         }
       });
     });
   }
 
   // Fetch parent's profile by profile ID (use this to get GUID for further recursion)
-  async function fetchParentProfileByID(profileId, ancestors = []) {
+  async function fetchParentProfileByID(profileId, ancestors = [], retries = 0) {
     console.log(`Fetching profile for parent ID ${profileId}...`);
 
     await delay(REQUEST_DELAY);
@@ -154,7 +161,13 @@ document.addEventListener('DOMContentLoaded', function () {
           resolve(parentData);  // Return the parent's data (including GUID)
         } else {
           console.warn(`No data found for parent ID ${profileId}.`);
-          resolve(null);
+          if (retries < MAX_RETRIES) {
+            console.log(`Retrying fetchParentProfileByID for ID ${profileId} (Attempt ${retries + 1})`);
+            resolve(await fetchParentProfileByID(profileId, ancestors, retries + 1));
+          } else {
+            console.error(`Failed to fetch data for parent ID ${profileId} after ${MAX_RETRIES} retries.`);
+            resolve(null);
+          }
         }
       });
     });
